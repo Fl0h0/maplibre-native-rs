@@ -1,0 +1,106 @@
+{
+  "version": 8,
+  "name": "GeoJSON Renderer Base Style",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  "sources": {
+    "basemap": {
+      "type": "vector",
+      "url": "https://demotiles.maplibre.org/tiles/tiles.json"
+    },
+    "geojson-overlay": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#D8F2FF"
+      }
+    },
+    {
+      "id": "coastline",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "countries",
+      "paint": {
+        "line-blur": 0.5,
+        "line-color": "#198EC8",
+        "line-width": {
+          "stops": [[0, 2], [6, 6], [14, 9], [22, 18]]
+        }
+      }
+    },
+    {
+      "id": "countries-fill",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "countries",
+      "paint": {
+        "fill-color": "#E8E4D9",
+        "fill-opacity": 0.8
+      }
+    },
+    {
+      "id": "countries-boundary",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "countries",
+      "paint": {
+        "line-color": "rgba(255, 255, 255, 1)",
+        "line-width": {
+          "stops": [[1, 1], [6, 2], [14, 6], [22, 12]]
+        }
+      }
+    },
+    {
+      "id": "geojson-fill",
+      "type": "fill",
+      "source": "geojson-overlay",
+      "filter": ["==", ["geometry-type"], "Polygon"],
+      "paint": {
+        "fill-color": "#088",
+        "fill-opacity": 0.5
+      }
+    },
+    {
+      "id": "geojson-fill-outline",
+      "type": "line",
+      "source": "geojson-overlay",
+      "filter": ["==", ["geometry-type"], "Polygon"],
+      "paint": {
+        "line-color": "#066",
+        "line-width": 2
+      }
+    },
+    {
+      "id": "geojson-line",
+      "type": "line",
+      "source": "geojson-overlay",
+      "filter": ["==", ["geometry-type"], "LineString"],
+      "paint": {
+        "line-color": "#f00",
+        "line-width": 3
+      }
+    },
+    {
+      "id": "geojson-circle",
+      "type": "circle",
+      "source": "geojson-overlay",
+      "filter": ["==", ["geometry-type"], "Point"],
+      "paint": {
+        "circle-radius": 8,
+        "circle-color": "#f00",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#fff"
+      }
+    }
+  ]
+}
+
+

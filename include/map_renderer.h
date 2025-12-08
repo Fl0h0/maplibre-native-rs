@@ -4,6 +4,9 @@
 #include <mbgl/map/map.hpp>
 #include <mbgl/map/map_options.hpp>
 #include <mbgl/style/style.hpp>
+#include <mbgl/style/sources/geojson_source.hpp>
+#include <mbgl/style/conversion/geojson.hpp>
+#include <mbgl/util/geojson.hpp>
 #include <mbgl/util/image.hpp>
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/util/premultiply.hpp>
@@ -127,6 +130,28 @@ inline void MapRenderer_setCamera(
 
 inline void MapRenderer_getStyle_loadURL(MapRenderer& self, const rust::Str styleUrl) {
     self.map->getStyle().loadURL((std::string)styleUrl);
+}
+
+inline bool MapRenderer_setGeoJSONSourceData(MapRenderer& self, const rust::Str sourceId, const rust::Str geojsonStr) {
+    auto& style = self.map->getStyle();
+    auto* source = style.getSource((std::string)sourceId);
+    if (!source) {
+        return false;
+    }
+    
+    auto* geoJSONSource = source->as<mbgl::style::GeoJSONSource>();
+    if (!geoJSONSource) {
+        return false;
+    }
+    
+    // Parse the GeoJSON string
+    mbgl::style::conversion::Error error;
+    auto geojson = mbgl::style::conversion::parseGeoJSON((std::string)geojsonStr, error);
+    if (geojson) {
+        geoJSONSource->setGeoJSON(std::move(*geojson));
+        return true;
+    }
+    return false;
 }
 
 } // namespace bridge

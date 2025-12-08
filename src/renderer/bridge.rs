@@ -147,6 +147,11 @@ pub mod ffi {
             pitch: f64,
         );
         fn MapRenderer_getStyle_loadURL(obj: Pin<&mut MapRenderer>, url: &str);
+        fn MapRenderer_setGeoJSONSourceData(
+            obj: Pin<&mut MapRenderer>,
+            source_id: &str,
+            geojson: &str,
+        ) -> bool;
     }
 
     extern "Rust" {

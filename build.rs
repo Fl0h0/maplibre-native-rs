@@ -190,6 +190,12 @@ fn resolve_mln_core(root: &Path) -> (PathBuf, Vec<PathBuf>) {
             .join("deps")
             .join("variant")
             .join("include"),
+        extracted_path
+            .join("vendor")
+            .join("maplibre-native-base")
+            .join("deps")
+            .join("geojson.hpp")
+            .join("include"),
         extracted_path.join("include"),
     ];
     (library_file, include_dirs)

@@ -121,6 +121,32 @@ impl<S> ImageRenderer<S> {
         ffi::MapRenderer_setDebugFlags(self.instance.pin_mut(), flags);
         self
     }
+
+    /// Update the data of an existing GeoJSON source in the style.
+    ///
+    /// This allows efficiently updating the GeoJSON data without reloading the entire style.
+    /// The source must already exist in the loaded style and be of type `geojson`.
+    ///
+    /// # Arguments
+    /// * `source_id` - The ID of the GeoJSON source to update
+    /// * `geojson` - The GeoJSON string (FeatureCollection, Feature, or Geometry)
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The source with the given ID does not exist
+    /// - The source is not a GeoJSON source
+    /// - The GeoJSON string is invalid
+    pub fn set_geojson_source_data(
+        &mut self,
+        source_id: &str,
+        geojson: &str,
+    ) -> Result<&mut Self, RenderingError> {
+        if ffi::MapRenderer_setGeoJSONSourceData(self.instance.pin_mut(), source_id, geojson) {
+            Ok(self)
+        } else {
+            Err(RenderingError::GeoJSONSourceError(source_id.to_string()))
+        }
+    }
 }
 
 impl ImageRenderer<Static> {
@@ -191,4 +217,10 @@ pub enum RenderingError {
     /// The renderer returned invalid or corrupted image data.
     #[error("Invalid image data received from renderer")]
     InvalidImageData,
+    /// Failed to update GeoJSON source data.
+    ///
+    /// This can occur if the source doesn't exist, is not a GeoJSON source,
+    /// or the provided GeoJSON string is invalid.
+    #[error("Failed to update GeoJSON source '{0}': source not found, not a GeoJSON source, or invalid GeoJSON")]
+    GeoJSONSourceError(String),
 }
