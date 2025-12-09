@@ -90,24 +90,25 @@ impl BoundingBox {
         let padded_width = bbox_width * (1.0 + padding * 2.0);
         let padded_height = bbox_height * (1.0 + padding * 2.0);
 
-        // Calculate the effective viewport dimensions based on output aspect ratio
-        // We need to fit the content within the output aspect ratio, then render
-        // at the viewport size
+        // Calculate the effective viewport dimensions based on output aspect ratio.
+        // After rendering at viewport size, we crop to match the output aspect ratio,
+        // then resize to final output dimensions.
+        // The zoom must ensure the bbox fits within the cropped region.
         let output_aspect = f64::from(output_width) / f64::from(output_height);
         let viewport_aspect = f64::from(viewport_width) / f64::from(viewport_height);
 
-        // Determine the effective viewport area that will be visible in the output
+        // Determine the crop region dimensions (what will be visible after cropping)
         let (effective_width, effective_height) = if output_aspect > viewport_aspect {
-            // Output is wider than viewport - height is limiting
-            // After resize, we'll crop width, so use full viewport height
-            let effective_h = f64::from(viewport_height);
-            let effective_w = effective_h * output_aspect;
-            (effective_w, effective_h)
-        } else {
-            // Output is taller than viewport - width is limiting
-            // After resize, we'll crop height, so use full viewport width
+            // Output is wider (more landscape) than viewport
+            // We keep full viewport width, crop height to match aspect ratio
             let effective_w = f64::from(viewport_width);
             let effective_h = effective_w / output_aspect;
+            (effective_w, effective_h)
+        } else {
+            // Output is taller (more portrait) than viewport
+            // We keep full viewport height, crop width to match aspect ratio
+            let effective_h = f64::from(viewport_height);
+            let effective_w = effective_h * output_aspect;
             (effective_w, effective_h)
         };
 

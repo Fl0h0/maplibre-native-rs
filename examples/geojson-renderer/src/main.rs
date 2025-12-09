@@ -28,14 +28,14 @@ mod bbox;
 mod storage;
 
 use axum::{
-    extract::{State, Json},
+    extract::{Json, State},
     http::StatusCode,
     routing::{get, post},
     Router,
 };
 use clap::Parser;
 use geojson::GeoJson;
-use image::imageops::FilterType;
+use image::imageops::{self, FilterType};
 use maplibre_native::StaticRenderPool;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -101,7 +101,6 @@ async fn health() -> &'static str {
 async fn render(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RenderRequest>,
-
 ) -> Result<Json<RenderResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Validate dimensions - don't allow upscaling beyond viewport
     let viewport_width = state.render_pool.width();
@@ -183,23 +182,49 @@ async fn render(
             )
         })?;
 
-    // // Resize image to requested dimensions if different from viewport
-    // let final_image = if request.width != viewport_width || request.height != viewport_height {
-    //     // Resize (downscale) to requested dimensions
-    //     image::imageops::resize(
-    //         image.as_image(),
-    //         request.width,
-    //         request.height,
-    //         FilterType::Lanczos3,
-    //     )
-    // } else {
-    //     image.as_image().clone()
-    // };
+    // Crop and resize image to requested dimensions if different from viewport
+    let final_image = if request.width != viewport_width || request.height != viewport_height {
+        // Calculate crop dimensions to match output aspect ratio
+        let output_aspect = f64::from(request.width) / f64::from(request.height);
+        let viewport_aspect = f64::from(viewport_width) / f64::from(viewport_height);
+
+        let (crop_width, crop_height) = if output_aspect > viewport_aspect {
+            // Output is wider - keep full width, crop height
+            let crop_w = viewport_width;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let crop_h = (f64::from(viewport_width) / output_aspect).round() as u32;
+            (crop_w, crop_h)
+        } else {
+            // Output is taller - keep full height, crop width
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let crop_w = (f64::from(viewport_height) * output_aspect).round() as u32;
+            let crop_h = viewport_height;
+            (crop_w, crop_h)
+        };
+
+        // Calculate crop offset (center crop)
+        let crop_x = (viewport_width - crop_width) / 2;
+        let crop_y = (viewport_height - crop_height) / 2;
+
+        // Crop from center
+        let cropped = imageops::crop_imm(image.as_image(), crop_x, crop_y, crop_width, crop_height)
+            .to_image();
+
+        // Resize to final output dimensions
+        imageops::resize(
+            &cropped,
+            request.width,
+            request.height,
+            FilterType::Lanczos3,
+        )
+    } else {
+        image.as_image().clone()
+    };
 
     // Save as WebP
     let file_path = state
         .storage
-        .save_webp(&image.as_image(), &filename)
+        .save_webp(&final_image, &filename)
         .await
         .map_err(|e| {
             (
