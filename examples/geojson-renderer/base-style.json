@@ -42,7 +42,7 @@
       "source": "basemap",
       "source-layer": "countries",
       "paint": {
-        "fill-color": "#E8E4D9",
+        "fill-color": "#0f0",
         "fill-opacity": 0.8
       }
     },
@@ -78,11 +78,29 @@
         "line-width": 2
       }
     },
+     {
+        "id": "outlineLayerId",
+        "type": "line",
+        "source": "geojson-overlay",
+      "filter": ["==", ["geometry-type"], "LineString"], 
+        "layout": {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        "paint": {
+          "line-color": "#fff",
+          "line-width": 5
+        }
+      },
     {
       "id": "geojson-line",
       "type": "line",
       "source": "geojson-overlay",
-      "filter": ["==", ["geometry-type"], "LineString"],
+      "filter": ["==", ["geometry-type"], "LineString"], 
+        "layout": {
+          "line-join": "round",
+          "line-cap": "round"
+        },
       "paint": {
         "line-color": "#f00",
         "line-width": 3

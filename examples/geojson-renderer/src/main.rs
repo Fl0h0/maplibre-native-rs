@@ -1,12 +1,19 @@
-//! GeoJSON Renderer Server
-//!
-//! A performant Axum web server that receives GeoJSON, renders it on a MapLibre base map
-//! with auto-fitted viewport, and saves the result as WebP images.
-//!
-//! # Usage
-//!
-//! Start the server:
+//! Run with defaults (style: base-style.json, output: ./output):
 //! ```bash
+//! cargo run --example geojson-renderer
+//! ```
+//!
+//! Override via CLI:
+//! ```bash
+//! cargo run --example geojson-renderer -- \
+//!   --style /path/to/style.json \
+//!   --output /path/to/output-dir
+//! ```
+//!
+//! Or via environment variables:
+//! ```bash
+//! GEOJSON_RENDERER_STYLE_PATH=/path/to/style.json \
+//! GEOJSON_RENDERER_OUTPUT_DIR=/path/to/output-dir \
 //! cargo run --example geojson-renderer
 //! ```
 //!
@@ -21,12 +28,12 @@ mod bbox;
 mod storage;
 
 use axum::{
-    extract::State,
+    extract::{State, Json},
     http::StatusCode,
-    response::Json,
     routing::{get, post},
     Router,
 };
+use clap::Parser;
 use geojson::GeoJson;
 use image::imageops::FilterType;
 use maplibre_native::StaticRenderPool;
@@ -47,18 +54,13 @@ struct AppState {
     storage: ImageStorage,
 }
 
-/// Request body for the /render endpoint.
 #[derive(Debug, Deserialize)]
 struct RenderRequest {
-    /// GeoJSON data to render (FeatureCollection, Feature, or Geometry)
     geojson: serde_json::Value,
-    /// Optional image width in pixels (default: 512)
     #[serde(default = "default_size")]
     width: u32,
-    /// Optional image height in pixels (default: 512)
     #[serde(default = "default_size")]
     height: u32,
-    /// Optional padding factor for auto-fit (default: 0.1 = 10%)
     #[serde(default = "default_padding")]
     padding: f64,
 }
@@ -71,30 +73,35 @@ fn default_padding() -> f64 {
     0.1
 }
 
-/// Response from the /render endpoint.
 #[derive(Debug, Serialize)]
 struct RenderResponse {
-    /// Path to the rendered image file
     file: String,
-    /// Whether this was a cache hit
     cached: bool,
 }
 
-/// Error response.
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: String,
 }
 
-/// Health check endpoint.
+#[derive(Parser, Debug)]
+#[command(name = "geojson-renderer", version, about = "GeoJSON Renderer Server")]
+struct Cli {
+    #[arg(long, env = "GEOJSON_RENDERER_STYLE_PATH")]
+    style: Option<PathBuf>,
+
+    #[arg(long, env = "GEOJSON_RENDERER_OUTPUT_DIR")]
+    output: Option<PathBuf>,
+}
+
 async fn health() -> &'static str {
     "OK"
 }
 
-/// Render GeoJSON to an image.
 async fn render(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RenderRequest>,
+
 ) -> Result<Json<RenderResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Validate dimensions - don't allow upscaling beyond viewport
     let viewport_width = state.render_pool.width();
@@ -122,14 +129,12 @@ async fn render(
         )
     })?;
 
-    // Generate hash-based filename for deduplication
     let hash_content = format!(
         "{}:{}:{}:{}",
         geojson_str, request.width, request.height, request.padding
     );
     let filename = ImageStorage::generate_filename(&hash_content);
 
-    // Check if already rendered (cache hit)
     if state.storage.exists(&filename).await {
         let file_path = state.storage.path(&filename);
         return Ok(Json(RenderResponse {
@@ -138,7 +143,6 @@ async fn render(
         }));
     }
 
-    // Parse GeoJSON to calculate bounding box
     let geojson: GeoJson = serde_json::from_value(request.geojson.clone()).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
@@ -148,7 +152,6 @@ async fn render(
         )
     })?;
 
-    // Calculate bounding box and camera parameters
     let bbox = calculate_bbox(&geojson).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
@@ -167,7 +170,6 @@ async fn render(
         request.padding,
     );
 
-    // Render the image
     let image = state
         .render_pool
         .render_static(geojson_str, lat, lon, zoom, 0.0, 0.0)
@@ -218,10 +220,15 @@ fn base_style_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("base-style.json")
 }
 
+fn default_output_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("output")
+}
+
 #[tokio::main]
 async fn main() {
-    // Initialize the render pool with the base style
-    let style_path = base_style_path();
+    let cli = Cli::parse();
+
+    let style_path = cli.style.unwrap_or_else(base_style_path);
     println!("Loading base style from: {}", style_path.display());
 
     let render_pool = StaticRenderPool::new(
@@ -231,33 +238,24 @@ async fn main() {
         VIEWPORT_HEIGHT,
     );
 
-    // Initialize storage
-    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("output");
+    let output_dir = cli.output.unwrap_or_else(default_output_dir);
     let storage = ImageStorage::new(&output_dir)
         .await
         .expect("Failed to create output directory");
     println!("Output directory: {}", output_dir.display());
 
-    // Create application state
     let state = Arc::new(AppState {
         render_pool,
         storage,
     });
 
-    // Build router
     let app = Router::new()
         .route("/health", get(health))
         .route("/render", post(render))
         .with_state(state);
 
-    // Start server
     let addr = "127.0.0.1:3000";
     println!("GeoJSON Renderer Server running on http://{addr}");
-    println!();
-    println!("Example usage:");
-    println!(r#"  curl -X POST http://{addr}/render \"#);
-    println!(r#"    -H "Content-Type: application/json" \"#);
-    println!(r#"    -d '{{"geojson": {{"type": "Point", "coordinates": [10, 50]}}}}'"#);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

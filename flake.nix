@@ -49,8 +49,7 @@
             pkgs.vulkan-headers
             pkgs.vulkan-validation-layers
 
-            # Often handy for Vulkan/graphics work
-            pkgs.shaderc
+            pkgs.mesa.drivers
           ];
 
           LD_LIBRARY_PATH = vulkanLibPath;
@@ -63,8 +62,12 @@
             export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             export SSL_CERT_DIR=${pkgs.cacert}/etc/ssl/certs
 
-            # Enable Vulkan validation layers in debug runs (optional)
-            export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+            export VK_ICD_FILENAMES="${pkgs.mesa.drivers}/share/vulkan/icd.d/lvp_icd.x86_64.json"
+
+            # (Optional) force software GL too, in case anything uses OpenGL
+            #export LIBGL_ALWAYS_SOFTWARE=1
+
+            echo "Using lavapipe ICD: $VK_ICD_FILENAMES"
           '';
         };
       }

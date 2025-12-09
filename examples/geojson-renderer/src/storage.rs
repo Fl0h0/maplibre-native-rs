@@ -1,9 +1,8 @@
 //! WebP encoding and hash-based file storage for rendered images.
 
-use image::ImageFormat;
 use sha2::{Digest, Sha256};
-use std::io::Cursor;
 use std::path::PathBuf;
+use webp::Encoder;
 
 /// Storage manager for rendered images.
 pub struct ImageStorage {
@@ -50,18 +49,18 @@ impl ImageStorage {
     ) -> std::io::Result<PathBuf> {
         let path = self.output_dir.join(filename);
 
-        // Encode to WebP
-        let mut buffer = Cursor::new(Vec::new());
-        image
-            .write_to(&mut buffer, ImageFormat::WebP)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let bytes: Vec<u8> = {
+        let (width, height) = image.dimensions();
+        let encoder = Encoder::from_rgba(image.as_raw(), width, height);
+        let webp_data = encoder.encode(75.0);
 
-        // Write to file
-        tokio::fs::write(&path, buffer.into_inner()).await?;
+        webp_data.to_vec()
+    };
+
+        tokio::fs::write(&path, bytes).await?;
 
         Ok(path)
     }
-
 }
 
 #[cfg(test)]
@@ -84,4 +83,3 @@ mod tests {
         assert_eq!(hash1, hash2);
     }
 }
-
