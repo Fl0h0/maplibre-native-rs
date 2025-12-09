@@ -45,8 +45,8 @@ use bbox::calculate_bbox;
 use storage::ImageStorage;
 
 /// Default viewport dimensions for the renderer.
-const VIEWPORT_WIDTH: u32 = 512;
-const VIEWPORT_HEIGHT: u32 = 512;
+const VIEWPORT_WIDTH: u32 = 1024;
+const VIEWPORT_HEIGHT: u32 = 1024;
 
 /// Application state shared across handlers.
 struct AppState {
