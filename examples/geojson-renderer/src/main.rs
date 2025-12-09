@@ -183,23 +183,23 @@ async fn render(
             )
         })?;
 
-    // Resize image to requested dimensions if different from viewport
-    let final_image = if request.width != viewport_width || request.height != viewport_height {
-        // Resize (downscale) to requested dimensions
-        image::imageops::resize(
-            image.as_image(),
-            request.width,
-            request.height,
-            FilterType::Lanczos3,
-        )
-    } else {
-        image.as_image().clone()
-    };
+    // // Resize image to requested dimensions if different from viewport
+    // let final_image = if request.width != viewport_width || request.height != viewport_height {
+    //     // Resize (downscale) to requested dimensions
+    //     image::imageops::resize(
+    //         image.as_image(),
+    //         request.width,
+    //         request.height,
+    //         FilterType::Lanczos3,
+    //     )
+    // } else {
+    //     image.as_image().clone()
+    // };
 
     // Save as WebP
     let file_path = state
         .storage
-        .save_webp(&final_image, &filename)
+        .save_webp(&image.as_image(), &filename)
         .await
         .map_err(|e| {
             (
