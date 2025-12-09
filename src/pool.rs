@@ -23,6 +23,7 @@
 //! # }
 //! ```
 
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{mpsc, LazyLock};
 use std::thread;
@@ -186,6 +187,8 @@ struct StaticRenderRequest {
 /// let pool = StaticRenderPool::new(
 ///     PathBuf::from("base-style.json"),
 ///     "geojson-overlay".to_string(),
+///     512,
+///     512,
 /// );
 ///
 /// // Render with GeoJSON data
@@ -197,6 +200,10 @@ struct StaticRenderRequest {
 pub struct StaticRenderPool {
     rendering_requests: mpsc::Sender<StaticRenderRequest>,
     source_id: String,
+    /// Viewport width in pixels
+    width: u32,
+    /// Viewport height in pixels
+    height: u32,
 }
 
 impl StaticRenderPool {
@@ -208,13 +215,23 @@ impl StaticRenderPool {
     /// # Arguments
     /// * `style_path` - Path to the base style JSON file
     /// * `source_id` - ID of the GeoJSON source in the style to update
+    /// * `width` - Viewport width in pixels
+    /// * `height` - Viewport height in pixels
+    ///
+    /// # Panics
+    /// Panics if width or height is 0.
     #[must_use]
-    pub fn new(style_path: PathBuf, source_id: String) -> Self {
+    pub fn new(style_path: PathBuf, source_id: String, width: u32, height: u32) -> Self {
         let (tx, rx) = mpsc::channel::<StaticRenderRequest>();
         let source_id_clone = source_id.clone();
 
+        let width_nz = NonZeroU32::new(width).expect("width must be non-zero");
+        let height_nz = NonZeroU32::new(height).expect("height must be non-zero");
+
         thread::spawn(move || {
-            let mut renderer = ImageRendererBuilder::default().build_static_renderer();
+            let mut renderer = ImageRendererBuilder::default()
+                .with_size(width_nz, height_nz)
+                .build_static_renderer();
 
             // Load the base style once at startup
             if let Err(e) = renderer.load_style_from_path(&style_path) {
@@ -267,7 +284,21 @@ impl StaticRenderPool {
         Self {
             rendering_requests: tx,
             source_id: source_id_clone,
+            width,
+            height,
         }
+    }
+
+    /// Get the viewport width in pixels.
+    #[must_use]
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Get the viewport height in pixels.
+    #[must_use]
+    pub fn height(&self) -> u32 {
+        self.height
     }
 
     /// Render a static map image with the given GeoJSON data and camera position.

@@ -28,6 +28,7 @@ use axum::{
     Router,
 };
 use geojson::GeoJson;
+use image::imageops::FilterType;
 use maplibre_native::StaticRenderPool;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -35,6 +36,10 @@ use std::sync::Arc;
 
 use bbox::calculate_bbox;
 use storage::ImageStorage;
+
+/// Default viewport dimensions for the renderer.
+const VIEWPORT_WIDTH: u32 = 512;
+const VIEWPORT_HEIGHT: u32 = 512;
 
 /// Application state shared across handlers.
 struct AppState {
@@ -91,6 +96,22 @@ async fn render(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RenderRequest>,
 ) -> Result<Json<RenderResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Validate dimensions - don't allow upscaling beyond viewport
+    let viewport_width = state.render_pool.width();
+    let viewport_height = state.render_pool.height();
+
+    if request.width > viewport_width || request.height > viewport_height {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "Requested dimensions {}x{} exceed viewport dimensions {}x{}. Upscaling is not supported.",
+                    request.width, request.height, viewport_width, viewport_height
+                ),
+            }),
+        ));
+    }
+
     // Serialize GeoJSON for hashing and rendering
     let geojson_str = serde_json::to_string(&request.geojson).map_err(|e| {
         (
@@ -138,7 +159,13 @@ async fn render(
     })?;
 
     let (lat, lon) = bbox.center();
-    let zoom = bbox.fit_zoom(request.width, request.height, request.padding);
+    let zoom = bbox.fit_zoom(
+        viewport_width,
+        viewport_height,
+        request.width,
+        request.height,
+        request.padding,
+    );
 
     // Render the image
     let image = state
@@ -154,10 +181,23 @@ async fn render(
             )
         })?;
 
+    // Resize image to requested dimensions if different from viewport
+    let final_image = if request.width != viewport_width || request.height != viewport_height {
+        // Resize (downscale) to requested dimensions
+        image::imageops::resize(
+            image.as_image(),
+            request.width,
+            request.height,
+            FilterType::Lanczos3,
+        )
+    } else {
+        image.as_image().clone()
+    };
+
     // Save as WebP
     let file_path = state
         .storage
-        .save_webp(image.as_image(), &filename)
+        .save_webp(&final_image, &filename)
         .await
         .map_err(|e| {
             (
@@ -184,7 +224,12 @@ async fn main() {
     let style_path = base_style_path();
     println!("Loading base style from: {}", style_path.display());
 
-    let render_pool = StaticRenderPool::new(style_path, "geojson-overlay".to_string());
+    let render_pool = StaticRenderPool::new(
+        style_path,
+        "geojson-overlay".to_string(),
+        VIEWPORT_WIDTH,
+        VIEWPORT_HEIGHT,
+    );
 
     // Initialize storage
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("output");
@@ -212,11 +257,8 @@ async fn main() {
     println!("Example usage:");
     println!(r#"  curl -X POST http://{addr}/render \"#);
     println!(r#"    -H "Content-Type: application/json" \"#);
-    println!(
-        r#"    -d '{{"geojson": {{"type": "Point", "coordinates": [10, 50]}}}}'"#
-    );
+    println!(r#"    -d '{{"geojson": {{"type": "Point", "coordinates": [10, 50]}}}}'"#);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
-

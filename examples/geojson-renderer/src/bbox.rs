@@ -57,12 +57,27 @@ impl BoundingBox {
 
     /// Calculate the optimal zoom level to fit this bounding box in a viewport.
     ///
+    /// This function calculates the zoom level based on the actual viewport dimensions,
+    /// accounting for cases where the output image will be resized after rendering.
+    ///
     /// # Arguments
-    /// * `width` - Viewport width in pixels
-    /// * `height` - Viewport height in pixels
+    /// * `viewport_width` - Actual renderer viewport width in pixels
+    /// * `viewport_height` - Actual renderer viewport height in pixels
+    /// * `output_width` - Desired output image width in pixels
+    /// * `output_height` - Desired output image height in pixels
     /// * `padding` - Padding factor (0.0 = no padding, 0.1 = 10% padding on each side)
+    ///
+    /// The zoom is calculated to ensure the bounding box fits within the output aspect ratio,
+    /// then adjusted for the actual viewport dimensions.
     #[allow(clippy::cast_precision_loss)]
-    pub fn fit_zoom(&self, width: u32, height: u32, padding: f64) -> f64 {
+    pub fn fit_zoom(
+        &self,
+        viewport_width: u32,
+        viewport_height: u32,
+        output_width: u32,
+        output_height: u32,
+        padding: f64,
+    ) -> f64 {
         let bbox_width = self.width();
         let bbox_height = self.height();
 
@@ -75,13 +90,34 @@ impl BoundingBox {
         let padded_width = bbox_width * (1.0 + padding * 2.0);
         let padded_height = bbox_height * (1.0 + padding * 2.0);
 
+        // Calculate the effective viewport dimensions based on output aspect ratio
+        // We need to fit the content within the output aspect ratio, then render
+        // at the viewport size
+        let output_aspect = f64::from(output_width) / f64::from(output_height);
+        let viewport_aspect = f64::from(viewport_width) / f64::from(viewport_height);
+
+        // Determine the effective viewport area that will be visible in the output
+        let (effective_width, effective_height) = if output_aspect > viewport_aspect {
+            // Output is wider than viewport - height is limiting
+            // After resize, we'll crop width, so use full viewport height
+            let effective_h = f64::from(viewport_height);
+            let effective_w = effective_h * output_aspect;
+            (effective_w, effective_h)
+        } else {
+            // Output is taller than viewport - width is limiting
+            // After resize, we'll crop height, so use full viewport width
+            let effective_w = f64::from(viewport_width);
+            let effective_h = effective_w / output_aspect;
+            (effective_w, effective_h)
+        };
+
         // Calculate zoom level based on Mercator projection
         // World at zoom 0 is 256 pixels wide (or 360 degrees)
         let world_dim = 256.0;
 
-        // Calculate zoom for width and height separately
+        // Calculate zoom for width and height separately using effective dimensions
         let zoom_x = if padded_width > 0.0 {
-            (f64::from(width) / world_dim * 360.0 / padded_width).log2()
+            (effective_width / world_dim * 360.0 / padded_width).log2()
         } else {
             20.0
         };
@@ -90,7 +126,7 @@ impl BoundingBox {
             // Account for Mercator latitude distortion
             let lat_rad = self.center().0.to_radians();
             let mercator_height = padded_height / lat_rad.cos().abs().max(0.01);
-            (f64::from(height) / world_dim * 180.0 / mercator_height).log2()
+            (effective_height / world_dim * 180.0 / mercator_height).log2()
         } else {
             20.0
         };
@@ -211,10 +247,9 @@ mod tests {
 
     #[test]
     fn test_calculate_bbox_point() {
-        let geojson: GeoJson = serde_json::from_str(
-            r#"{"type": "Point", "coordinates": [10.0, 20.0]}"#
-        ).unwrap();
-        
+        let geojson: GeoJson =
+            serde_json::from_str(r#"{"type": "Point", "coordinates": [10.0, 20.0]}"#).unwrap();
+
         let bbox = calculate_bbox(&geojson).unwrap();
         assert!((bbox.min_lon - 10.0).abs() < 0.001);
         assert!((bbox.min_lat - 20.0).abs() < 0.001);
@@ -226,9 +261,10 @@ mod tests {
             r#"{
                 "type": "Polygon",
                 "coordinates": [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]
-            }"#
-        ).unwrap();
-        
+            }"#,
+        )
+        .unwrap();
+
         let bbox = calculate_bbox(&geojson).unwrap();
         assert!((bbox.min_lon - 0.0).abs() < 0.001);
         assert!((bbox.min_lat - 0.0).abs() < 0.001);
@@ -236,5 +272,3 @@ mod tests {
         assert!((bbox.max_lat - 10.0).abs() < 0.001);
     }
 }
-
-
