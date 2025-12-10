@@ -49,7 +49,7 @@
             pkgs.vulkan-headers
             pkgs.vulkan-validation-layers
 
-            pkgs.mesa.drivers
+            pkgs.mesa
           ];
 
           LD_LIBRARY_PATH = vulkanLibPath;
@@ -62,7 +62,7 @@
             export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
             export SSL_CERT_DIR=${pkgs.cacert}/etc/ssl/certs
 
-            export VK_ICD_FILENAMES="${pkgs.mesa.drivers}/share/vulkan/icd.d/lvp_icd.x86_64.json"
+            export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json"
 
             # (Optional) force software GL too, in case anything uses OpenGL
             #export LIBGL_ALWAYS_SOFTWARE=1
